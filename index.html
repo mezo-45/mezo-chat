@@ -6,9 +6,9 @@
     <title>Mezo Live Chat</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Firebase Core SDK (v8 compat for simplicity in single file) -->
+    <!-- Firebase Core SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
@@ -57,9 +57,7 @@
             </div>
             <div class="flex-1 overflow-y-auto p-2 space-y-1">
                 <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold px-3 py-2">Active Room Users</p>
-                <div id="users-list" class="space-y-1">
-                    <!-- Dynamic users will appear here -->
-                </div>
+                <div id="users-list" class="space-y-1"></div>
             </div>
         </aside>
 
@@ -72,12 +70,8 @@
                 </div>
             </header>
 
-            <!-- Messages Window -->
-            <main id="chat-canvas" class="flex-1 p-6 overflow-y-auto space-y-4 flex flex-col">
-                <!-- Messages injection -->
-            </main>
+            <main id="chat-canvas" class="flex-1 p-6 overflow-y-auto space-y-4 flex flex-col"></main>
 
-            <!-- Input Footer -->
             <footer class="p-4 bg-[#0F172A] border-t border-slate-800/80 flex items-center gap-3">
                 <div class="flex-1 relative flex items-center">
                     <input id="message-input" type="text" placeholder="Type your live message..." class="w-full bg-[#0B0F19] text-slate-200 pl-4 pr-10 py-2.5 rounded-full border border-slate-800 focus:outline-none focus:border-indigo-500 text-sm">
@@ -89,9 +83,6 @@
     </div>
 
     <script>
-        // ==========================================
-        // 1. FIREBASE CONFIGURATION (YOUR LIVE KEYS)
-        // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyBdxK2fpzO6WvSnaU674KXgLBj9ubE_xvk",
             authDomain: "mezo-chat-adc59.firebaseapp.com",
@@ -102,13 +93,9 @@
             measurementId: "G-8R82QF0PHL"
         };
         
-        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // ==========================================
-        // 2. ROOM & USER GENERATION LOGIC
-        // ==========================================
         const urlParams = new URLSearchParams(window.location.search);
         let roomID = urlParams.get('room') || 'Room_' + Math.random().toString(36).substring(2, 9);
         let myUsername = localStorage.getItem('chat_username') || '';
@@ -119,9 +106,7 @@
         const sendBtn = document.getElementById('send-btn');
         const chatCanvas = document.getElementById('chat-canvas');
 
-        if (myUsername) {
-            startApp(myUsername);
-        }
+        if (myUsername) { startApp(myUsername); }
 
         document.getElementById('btn-login').addEventListener('click', () => {
             const nameInput = document.getElementById('auth-name').value.trim();
@@ -137,6 +122,12 @@
             
             document.getElementById('user-display-name').innerText = myUsername;
             document.getElementById('user-avatar').innerText = myUsername.charAt(0).toUpperCase();
+
+            // التحديث التلقائي للينك فوق في المتصفح بكود الأوضة الصح
+            if (!urlParams.get('room')) {
+                const newURL = window.location.protocol + '//' + window.location.host + window.location.pathname + '?room=' + roomID;
+                window.history.pushState({ path: newURL }, '', newURL);
+            }
 
             joinRoomOnServer();
             listenForMessages();
@@ -163,8 +154,64 @@
             });
         }
 
-        // ==========================================
-        // 3. REAL-TIME MESSAGING LOGIC
+        messageInput.addEventListener('input', (e) => {
+            if (e.target.value.trim().length > 0) sendBtn.classList.remove('hidden');
+            else sendBtn.classList.add('hidden');
+        });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            db.collection('rooms').doc(roomID).collection('messages').add({
+                sender: myUsername,
+                text: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            messageInput.value = '';
+            sendBtn.classList.add('hidden');
+        }
+
+        function listenForMessages() {
+            db.collection('rooms').doc(roomID).collection('messages')
+              .orderBy('timestamp', 'asc')
+              .onSnapshot(snapshot => {
+                  chatCanvas.innerHTML = '';
+                  snapshot.forEach(doc => {
+                      const msg = doc.data();
+                      const isMe = msg.sender === myUsername;
+                      
+                      const msgBubble = document.createElement('div');
+                      msgBubble.className = `flex flex-col gap-1 max-w-[75%] ${isMe ? 'self-end' : 'self-start'}`;
+                      
+                      msgBubble.innerHTML = `
+                          <span class="text-[10px] text-slate-500 ${isMe ? 'text-right' : 'text-left'}">${msg.sender}</span>
+                          <div class="${isMe ? 'bg-[#6366F1] text-white rounded-tr-none' : 'bg-[#1E293B] text-slate-200 rounded-tl-none'} rounded-2xl p-3.5 shadow-md text-sm">
+                              <p class="leading-relaxed">${msg.text}</p>
+                          </div>
+                      `;
+                      chatCanvas.appendChild(msgBubble);
+                  });
+                  chatCanvas.scrollTop = chatCanvas.scrollHeight;
+              });
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        document.getElementById('btn-invite').addEventListener('click', () => {
+            const cleanURL = window.location.protocol + '//' + window.location.host + window.location.pathname;
+            const inviteURL = cleanURL + '?room=' + roomID;
+            navigator.clipboard.writeText(inviteURL).then(() => {
+                alert('Success! Link copied to clipboard.');
+            }).catch(() => {
+                alert('Copy this link manually: ' + inviteURL);
+            });
+        });
+    </script>
+</body>
+</html>
         // ==========================================
         messageInput.addEventListener('input', (e) => {
             if (e.target.value.trim().length > 0) sendBtn.classList.remove('hidden');
