@@ -117,6 +117,95 @@
             document.getElementById('user-display-name').innerText = myUsername + " (You)";
             document.getElementById('user-avatar').innerText = myUsername.charAt(0).toUpperCase();
 
+            if (!urlParams.get('room')) {
+                const newURL = window.location.protocol + '//' + window.location.host + window.location.pathname + '?room=' + roomID;
+                window.history.pushState({ path: newURL }, '', newURL);
+            }
+
+            joinRoomOnServer();
+            listenForMessages();
+        }
+
+        function joinRoomOnServer() {
+            db.collection('rooms').doc(roomID).collection('users').doc(myUsername).set({
+                username: myUsername,
+                lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            db.collection('rooms').doc(roomID).collection('users').onSnapshot(snapshot => {
+                const usersList = document.getElementById('users-list');
+                if(usersList) {
+                    usersList.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const user = doc.data();
+                        usersList.innerHTML += `<div class="p-2 bg-slate-800/40 rounded-xl text-xs">${user.username}</div>`;
+                    });
+                }
+            });
+        }
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            db.collection('rooms').doc(roomID).collection('messages').add({
+                sender: myUsername,
+                text: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            messageInput.value = '';
+        }
+
+        function listenForMessages() {
+            db.collection('rooms').doc(roomID).collection('messages')
+              .orderBy('timestamp', 'asc')
+              .onSnapshot(snapshot => {
+                  chatCanvas.innerHTML = '';
+                  snapshot.forEach(doc => {
+                      const msg = doc.data();
+                      const isMe = msg.sender === myUsername;
+                      
+                      const msgBubble = document.createElement('div');
+                      msgBubble.className = `flex flex-col gap-1 max-w-[85%] ${isMe ? 'self-end' : 'self-start'}`;
+                      
+                      msgBubble.innerHTML = `
+                          <span class="text-[9px] text-slate-500 ${isMe ? 'text-right' : 'text-left'}">${msg.sender}</span>
+                          <div class="${isMe ? 'bg-[#6366F1] text-white rounded-tr-none' : 'bg-[#1E293B] text-slate-200 rounded-tl-none'} rounded-2xl p-3 shadow-md text-sm">
+                              <p class="leading-relaxed break-all">${msg.text}</p>
+                          </div>
+                      `;
+                      chatCanvas.appendChild(msgBubble);
+                  });
+                  chatCanvas.scrollTop = chatCanvas.scrollHeight;
+              });
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        document.getElementById('btn-invite').addEventListener('click', () => {
+            const cleanURL = window.location.protocol + '//' + window.location.host + window.location.pathname;
+            const inviteURL = cleanURL + '?room=' + roomID;
+            
+            navigator.clipboard.writeText(inviteURL).then(() => {
+                alert('Success! Link copied. Send it to your friend:\n' + inviteURL);
+            }).catch(() => {
+                prompt('Copy this link manually:', inviteURL);
+            });
+        });
+    </script>
+</body>
+</html>
+
+        function startApp(username) {
+            myUsername = username;
+            authScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+            
+            document.getElementById('user-display-name').innerText = myUsername + " (You)";
+            document.getElementById('user-avatar').innerText = myUsername.charAt(0).toUpperCase();
+
             // تثبيت رقم الغرفة في الرابط فوق فوراً
             if (!urlParams.get('room')) {
                 const newURL = window.location.protocol + '//' + window.location.host + window.location.pathname + '?room=' + roomID;
