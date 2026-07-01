@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mezo Live Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase Core SDK (v8 compat for simplicity in single file) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0B0F19; }
+        ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-[#0F172A] h-screen w-screen flex items-center justify-center text-slate-100 overflow-hidden">
+
+    <!-- STAGE 1: LOGIN -->
+    <div id="auth-screen" class="w-full max-w-md bg-[#0B0F19] p-8 rounded-3xl shadow-2xl border border-slate-800/60 flex flex-col items-center gap-6">
+        <div class="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 text-3xl shadow-[0_0_20px_rgba(99,102,241,0.15)]">
+            <i class="fa-solid fa-comments"></i>
+        </div>
+        <div class="text-center">
+            <h1 class="text-2xl font-bold">Welcome to VibeChat</h1>
+            <p class="text-xs text-slate-400 mt-1">Enter your name to connect instantly</p>
+        </div>
+        <div class="w-full space-y-4">
+            <div>
+                <label class="block text-xs text-slate-400 mb-1.5 ml-1">Your Name</label>
+                <input id="auth-name" type="text" placeholder="e.g. Mezo" class="w-full bg-[#0F172A] border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-xl px-4 py-3 text-sm text-slate-200">
+            </div>
+        </div>
+        <button id="btn-login" class="w-full bg-[#6366F1] hover:bg-[#5154ec] text-white font-medium py-3 rounded-xl text-sm transition-all shadow-lg">
+            Launch Chat Room
+        </button>
+    </div>
+
+    <!-- STAGE 2: MAIN APP -->
+    <div id="main-app" class="w-full h-full max-w-5xl bg-[#0B0F19] rounded-none md:rounded-3xl shadow-2xl flex border border-slate-800/50 overflow-hidden hidden">
+        
+        <!-- SIDEBAR -->
+        <aside class="w-full md:w-80 bg-[#0F172A] border-r border-slate-800/80 flex flex-col z-20">
+            <div class="p-4 border-b border-slate-800/60 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div id="user-avatar" class="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold text-white">U</div>
+                    <span id="user-display-name" class="font-medium text-sm truncate max-w-[120px]">Username</span>
+                </div>
+                <button id="btn-invite" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700/50 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-indigo-400 font-medium transition-all">
+                    <i class="fa-solid fa-user-plus"></i> Invite Friend
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                <p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold px-3 py-2">Active Room Users</p>
+                <div id="users-list" class="space-y-1">
+                    <!-- Dynamic users will appear here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- CHAT AREA -->
+        <section class="flex-1 flex flex-col bg-[#0B0F19]">
+            <header class="px-6 py-4 bg-[#0F172A] border-b border-slate-800/80 flex items-center justify-between">
+                <div>
+                    <h2 class="font-semibold text-sm">Live Room Chat</h2>
+                    <p class="text-[11px] text-emerald-400">Connected to secure server</p>
+                </div>
+            </header>
+
+            <!-- Messages Window -->
+            <main id="chat-canvas" class="flex-1 p-6 overflow-y-auto space-y-4 flex flex-col">
+                <!-- Messages injection -->
+            </main>
+
+            <!-- Input Footer -->
+            <footer class="p-4 bg-[#0F172A] border-t border-slate-800/80 flex items-center gap-3">
+                <div class="flex-1 relative flex items-center">
+                    <input id="message-input" type="text" placeholder="Type your live message..." class="w-full bg-[#0B0F19] text-slate-200 pl-4 pr-10 py-2.5 rounded-full border border-slate-800 focus:outline-none focus:border-indigo-500 text-sm">
+                </div>
+                <button id="send-btn" class="w-10 h-10 rounded-full bg-[#6366F1] hover:bg-[#5154ec] text-white flex items-center justify-center transition-all shadow-lg hidden"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+            </footer>
+        </section>
+
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. FIREBASE CONFIGURATION (YOUR LIVE KEYS)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBdxK2fpzO6WvSnaU674KXgLBj9ubE_xvk",
+            authDomain: "mezo-chat-adc59.firebaseapp.com",
+            projectId: "mezo-chat-adc59",
+            storageBucket: "mezo-chat-adc59.firebasestorage.app",
+            messagingSenderId: "351930177210",
+            appId: "1:351930177210:web:fefb91c7ca7fe0e3bbd483",
+            measurementId: "G-8R82QF0PHL"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // ==========================================
+        // 2. ROOM & USER GENERATION LOGIC
+        // ==========================================
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomID = urlParams.get('room') || 'Room_' + Math.random().toString(36).substring(2, 9);
+        let myUsername = localStorage.getItem('chat_username') || '';
+
+        const authScreen = document.getElementById('auth-screen');
+        const mainApp = document.getElementById('main-app');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const chatCanvas = document.getElementById('chat-canvas');
+
+        if (myUsername) {
+            startApp(myUsername);
+        }
+
+        document.getElementById('btn-login').addEventListener('click', () => {
+            const nameInput = document.getElementById('auth-name').value.trim();
+            if (!nameInput) return alert('Please enter a name');
+            localStorage.setItem('chat_username', nameInput);
+            startApp(nameInput);
+        });
+
+        function startApp(username) {
+            myUsername = username;
+            authScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+            
+            document.getElementById('user-display-name').innerText = myUsername;
+            document.getElementById('user-avatar').innerText = myUsername.charAt(0).toUpperCase();
+
+            joinRoomOnServer();
+            listenForMessages();
+        }
+
+        function joinRoomOnServer() {
+            db.collection('rooms').doc(roomID).collection('users').doc(myUsername).set({
+                username: myUsername,
+                lastActive: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            db.collection('rooms').doc(roomID).collection('users').onSnapshot(snapshot => {
+                const usersList = document.getElementById('users-list');
+                usersList.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const user = doc.data();
+                    usersList.innerHTML += `
+                        <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800/20 border border-slate-700/10">
+                            <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-bold text-xs">${user.username.charAt(0).toUpperCase()}</div>
+                            <span class="text-xs font-medium text-slate-300">${user.username} ${user.username === myUsername ? '(You)' : ''}</span>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        // ==========================================
+        // 3. REAL-TIME MESSAGING LOGIC
+        // ==========================================
+        messageInput.addEventListener('input', (e) => {
+            if (e.target.value.trim().length > 0) sendBtn.classList.remove('hidden');
+            else sendBtn.classList.add('hidden');
+        });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            db.collection('rooms').doc(roomID).collection('messages').add({
+                sender: myUsername,
+                text: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            messageInput.value = '';
+            sendBtn.classList.add('hidden');
+        }
+
+        function listenForMessages() {
+            db.collection('rooms').doc(roomID).collection('messages')
+              .orderBy('timestamp', 'asc')
+              .onSnapshot(snapshot => {
+                  chatCanvas.innerHTML = '';
+                  snapshot.forEach(doc => {
+                      const msg = doc.data();
+                      const isMe = msg.sender === myUsername;
+                      
+                      const msgBubble = document.createElement('div');
+                      msgBubble.className = `flex flex-col gap-1 max-w-[75%] ${isMe ? 'self-end' : 'self-start'}`;
+                      
+                      msgBubble.innerHTML = `
+                          <span class="text-[10px] text-slate-500 ${isMe ? 'text-right' : 'text-left'}">${msg.sender}</span>
+                          <div class="${isMe ? 'bg-[#6366F1] text-white rounded-tr-none' : 'bg-[#1E293B] text-slate-200 rounded-tl-none'} rounded-2xl p-3.5 shadow-md text-sm">
+                              <p class="leading-relaxed">${msg.text}</p>
+                          </div>
+                      `;
+                      chatCanvas.appendChild(msgBubble);
+                  });
+                  chatCanvas.scrollTop = chatCanvas.scrollHeight;
+              }, error => {
+                  console.error("Database connection error: ", error);
+              });
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        document.getElementById('btn-invite').addEventListener('click', () => {
+            const cleanURL = window.location.protocol + '//' + window.location.host + window.location.pathname;
+            const inviteURL = cleanURL + '?room=' + roomID;
+            
+            navigator.clipboard.writeText(inviteURL).then(() => {
+                alert('Success! Your private Room Invite Link copied. Send it to your friend now!');
+            }).catch(() => {
+                alert('Room ID: ' + roomID + ' (Copy your URL bar and add ?room=' + roomID + ')');
+            });
+        });
+    </script>
+</body>
+</html>
